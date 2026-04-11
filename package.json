@@ -7,6 +7,8 @@
     "garden": "./src/cli.js"
   },
   "scripts": {
+    "build": "NODE_NO_WARNINGS=1 node ./scripts/build.mjs",
+    "link": "npm link",
     "test": "NODE_NO_WARNINGS=1 node --test",
     "start": "./src/cli.js help"
   },

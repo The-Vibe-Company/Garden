@@ -50,6 +50,19 @@ cd garden
 
 Node 22+ is required because V0 uses the built-in `node:sqlite` module.
 
+Build the local CLI:
+
+```bash
+npm run build
+```
+
+Link the `garden` command globally on your machine:
+
+```bash
+npm link
+garden help
+```
+
 ## Quick Start
 
 Initialize your local config:
