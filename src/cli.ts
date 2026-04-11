@@ -382,6 +382,7 @@ async function handleMcp(argv) {
   const parsed = parseRootOptions(argv);
   const { config } = loadConfig(parsed.values.config);
   const { db } = await openGardenDb(parsed.values.db);
+  console.error("Garden MCP server listening on stdio");
   await runMcpServer({ db, config });
 }
 

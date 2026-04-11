@@ -1,17 +1,17 @@
-function range(start, end, step = 1) {
-  const values = [];
+function range(start: number, end: number, step = 1) {
+  const values: number[] = [];
   for (let current = start; current <= end; current += step) {
     values.push(current);
   }
   return values;
 }
 
-function parsePart(part, min, max) {
+function parsePart(part: string, min: number, max: number) {
   if (part === "*") {
     return range(min, max);
   }
 
-  const values = new Set();
+  const values = new Set<number>();
   for (const segment of part.split(",")) {
     const [base, stepRaw] = segment.split("/");
     const step = stepRaw ? Number(stepRaw) : 1;
@@ -44,7 +44,7 @@ function parsePart(part, min, max) {
   return normalized;
 }
 
-export function matchesCron(date, expression) {
+export function matchesCron(date: Date, expression: string) {
   const parts = expression.trim().split(/\s+/);
   if (parts.length !== 5) {
     throw new Error(`Expected a 5-field cron expression, got: ${expression}`);

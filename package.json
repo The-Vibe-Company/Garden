@@ -4,16 +4,26 @@
   "description": "A deterministic local runtime for attention queues, schedules, webhooks, and Codex-powered workflows around Granite.",
   "type": "module",
   "bin": {
-    "garden": "./src/cli.js"
+    "garden": "./dist/src/cli.js"
   },
   "scripts": {
     "build": "NODE_NO_WARNINGS=1 node ./scripts/build.mjs",
     "link": "npm link",
-    "test": "NODE_NO_WARNINGS=1 node --test",
-    "start": "./src/cli.js help"
+    "test": "NODE_NO_WARNINGS=1 node --import tsx --test test/**/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "start": "NODE_NO_WARNINGS=1 node --import tsx ./src/cli.ts help"
   },
   "engines": {
     "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
   },
   "keywords": [
     "garden",

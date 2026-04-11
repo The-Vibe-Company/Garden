@@ -16,6 +16,7 @@ function run(command, args, label) {
 }
 
 console.log("Building Garden v0");
-run("node", ["--test"], "test suite");
-run("./src/cli.js", ["help"], "CLI smoke test");
+run("npm", ["test"], "test suite");
+run("npm", ["run", "typecheck"], "typecheck");
+run("node", ["./dist/src/cli.js", "help"], "CLI smoke test");
 console.log("Garden build complete");

@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { resolveConfigPath, writeJsonFile, readJsonFile, ensureParentDir } from "./env.js";
+import type { GardenConfig, WorkflowDefinition } from "./types.js";
 
-export const DEFAULT_CONFIG = {
+export const DEFAULT_CONFIG: GardenConfig = {
   vaultPath: "{{env.HOME}}/.granite",
   tickIntervalSeconds: 60,
   server: {
@@ -80,7 +81,7 @@ export function loadConfig(configPath) {
   if (!fs.existsSync(resolved)) {
     throw new Error(`Config file not found: ${resolved}. Run "garden init" first.`);
   }
-  const config = readJsonFile(resolved);
+  const config = readJsonFile(resolved) as Partial<GardenConfig>;
   return { path: resolved, config: normalizeConfig(config) };
 }
 
@@ -94,17 +95,19 @@ export function initConfig(configPath, { force = false } = {}) {
   return resolved;
 }
 
-export function normalizeConfig(config) {
-  const normalized = structuredClone(DEFAULT_CONFIG);
+export function normalizeConfig(config: Partial<GardenConfig>) {
+  const normalized = structuredClone(DEFAULT_CONFIG) as GardenConfig;
   normalized.vaultPath = config.vaultPath ?? normalized.vaultPath;
   normalized.tickIntervalSeconds = Number(config.tickIntervalSeconds ?? normalized.tickIntervalSeconds);
   normalized.server = { ...normalized.server, ...(config.server ?? {}) };
   normalized.codex = { ...normalized.codex, ...(config.codex ?? {}) };
-  normalized.workflows = Array.isArray(config.workflows) ? config.workflows : normalized.workflows;
+  normalized.workflows = Array.isArray(config.workflows)
+    ? (config.workflows as WorkflowDefinition[])
+    : normalized.workflows;
   return normalized;
 }
 
-export function findWorkflow(config, workflowId) {
+export function findWorkflow(config: GardenConfig, workflowId: string) {
   const workflow = config.workflows.find((item) => item.id === workflowId);
   if (!workflow) {
     throw new Error(`Unknown workflow: ${workflowId}`);
@@ -112,7 +115,7 @@ export function findWorkflow(config, workflowId) {
   return workflow;
 }
 
-export function webhookWorkflows(config, eventType) {
+export function webhookWorkflows(config: GardenConfig, eventType: string) {
   return config.workflows.filter(
     (workflow) =>
       workflow.enabled !== false &&
@@ -121,7 +124,7 @@ export function webhookWorkflows(config, eventType) {
   );
 }
 
-export function scheduledWorkflows(config) {
+export function scheduledWorkflows(config: GardenConfig) {
   return config.workflows.filter(
     (workflow) =>
       workflow.enabled !== false &&

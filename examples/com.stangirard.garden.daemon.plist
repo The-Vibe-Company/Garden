@@ -9,7 +9,7 @@
     <array>
       <string>/usr/bin/env</string>
       <string>node</string>
-      <string>/path/to/garden/src/cli.js</string>
+      <string>/path/to/Garden/dist/src/cli.js</string>
       <string>daemon</string>
     </array>
 

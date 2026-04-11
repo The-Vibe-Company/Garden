@@ -44,8 +44,8 @@ Those can sit on top later.
 ## Install
 
 ```bash
-git clone https://github.com/StanGirard/garden.git
-cd garden
+git clone https://github.com/The-Vibe-Company/Garden.git
+cd Garden
 ```
 
 Node 22+ is required because V0 uses the built-in `node:sqlite` module.
@@ -68,7 +68,7 @@ garden help
 Initialize your local config:
 
 ```bash
-./src/cli.js init
+node ./dist/src/cli.js init
 ```
 
 This writes `~/.garden/config.json`.
@@ -76,13 +76,13 @@ This writes `~/.garden/config.json`.
 Show the current recap:
 
 ```bash
-./src/cli.js today
+node ./dist/src/cli.js today
 ```
 
 Create an attention item manually:
 
 ```bash
-./src/cli.js attention add \
+node ./dist/src/cli.js attention add \
   --type reply_needed \
   --title "Reply to Monka about MVP priorities" \
   --body "Draft is ready in Granite." \
@@ -93,20 +93,20 @@ Create an attention item manually:
 Run the daemon:
 
 ```bash
-./src/cli.js daemon
+node ./dist/src/cli.js daemon
 ```
 
 Emit a local event for testing:
 
 ```bash
-./src/cli.js webhook emit transcript.completed \
+node ./dist/src/cli.js webhook emit transcript.completed \
   --payload-file ./examples/transcript-event.json
 ```
 
 Start the MCP server:
 
 ```bash
-./src/cli.js mcp
+node ./dist/src/cli.js mcp
 ```
 
 ## Architecture
@@ -262,8 +262,8 @@ Example Codex MCP config:
 
 ```toml
 [mcp.garden]
-command = "/absolute/path/to/garden/src/cli.js"
-args = ["mcp", "--config", "~/.garden/config.json"]
+command = "/absolute/path/to/node"
+args = ["/absolute/path/to/Garden/dist/src/cli.js", "mcp", "--config", "~/.garden/config.json"]
 ```
 
 ## launchd

@@ -8,9 +8,9 @@ function suppressSqliteExperimentalWarning() {
   warningPatchInstalled = true;
   const originalEmitWarning = process.emitWarning.bind(process);
   process.emitWarning = (warning, ...args) => {
-    const warningName =
-      typeof warning === "string" ? args[0]?.type ?? "" : warning?.name ?? "";
-    if (warningName === "ExperimentalWarning") {
+    const warningName = typeof warning === "string" ? args[1] ?? args[0]?.type ?? "" : warning?.name ?? "";
+    const warningMessage = typeof warning === "string" ? warning : warning?.message ?? "";
+    if (warningName === "ExperimentalWarning" || warningMessage.includes("SQLite is an experimental feature")) {
       return;
     }
     return originalEmitWarning(warning, ...args);

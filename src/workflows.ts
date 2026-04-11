@@ -11,6 +11,7 @@ import { minuteCursorKey, nowIso } from "./env.js";
 import { notifyMacos } from "./notifier.js";
 import { renderTemplate } from "./template.js";
 import { runCodexTask } from "./codex.js";
+import type { AttentionItemInput, CodexExecStep, GardenConfig, NotifyMacosStep, RunWorkflowResult, WorkflowDefinition, WorkflowEvent } from "./types.js";
 
 function buildContext({ config, workflow, event, trigger, run }) {
   return {
@@ -26,7 +27,7 @@ function buildContext({ config, workflow, event, trigger, run }) {
 
 async function executeStep({ db, step, context, codexConfig }) {
   if (step.type === "codex.exec") {
-    const rendered = renderTemplate(step, context);
+    const rendered = renderTemplate(step, context) as CodexExecStep & { codex?: Record<string, unknown> };
     const result = await runCodexTask({
       codexConfig: {
         ...codexConfig,
@@ -53,7 +54,7 @@ async function executeStep({ db, step, context, codexConfig }) {
   }
 
   if (step.type === "attention.create") {
-    const rendered = renderTemplate(step.attention ?? {}, context);
+    const rendered = renderTemplate(step.attention ?? {}, context) as AttentionItemInput;
     const item = createAttentionItem(db, rendered);
     if (step.notify) {
       await notifyMacos({
@@ -70,7 +71,7 @@ async function executeStep({ db, step, context, codexConfig }) {
   }
 
   if (step.type === "notify.macos") {
-    const rendered = renderTemplate(step, context);
+    const rendered = renderTemplate(step, context) as NotifyMacosStep;
     await notifyMacos({
       title: rendered.title ?? "Garden",
       subtitle: rendered.subtitle ?? "",
@@ -85,7 +86,7 @@ async function executeStep({ db, step, context, codexConfig }) {
   throw new Error(`Unsupported workflow step type: ${step.type}`);
 }
 
-export async function runWorkflow({ db, config, workflow, triggerType, triggerValue, event }) {
+export async function runWorkflow({ db, config, workflow, triggerType, triggerValue, event }): Promise<RunWorkflowResult> {
   const start = startWorkflowRun(db, {
     workflowId: workflow.id,
     triggerType,

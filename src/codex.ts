@@ -3,8 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { expandHome, maybeParseJson } from "./env.js";
+import type { CodexConfig, CodexTaskResult } from "./types.js";
 
-function createTempOutputFile() {
+function createTempOutputFile(): string {
   return path.join(os.tmpdir(), `garden-codex-output-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`);
 }
 
@@ -13,7 +14,12 @@ export async function runCodexTask({
   prompt,
   cwd,
   workflowId
-}) {
+}: {
+  codexConfig: CodexConfig;
+  prompt: string;
+  cwd?: string;
+  workflowId?: string;
+}): Promise<CodexTaskResult> {
   const outputFile = createTempOutputFile();
   const command = expandHome(codexConfig.command ?? "codex");
   const args = ["exec", "-o", outputFile];
@@ -35,7 +41,7 @@ export async function runCodexTask({
   }
   args.push("-");
 
-  return new Promise((resolve) => {
+  return new Promise<CodexTaskResult>((resolve) => {
     const child = spawn(command, args, {
       cwd: expandHome(cwd ?? process.cwd()),
       stdio: ["pipe", "pipe", "pipe"],
