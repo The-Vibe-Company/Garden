@@ -1,0 +1,87 @@
+{
+  "vaultPath": "{{env.HOME}}/.granite",
+  "tickIntervalSeconds": 60,
+  "server": {
+    "host": "127.0.0.1",
+    "port": 9452,
+    "secretEnv": "GARDEN_WEBHOOK_SECRET"
+  },
+  "codex": {
+    "command": "codex",
+    "sandbox": "workspace-write",
+    "profile": null,
+    "model": null,
+    "extraArgs": [
+      "--skip-git-repo-check",
+      "--ephemeral"
+    ]
+  },
+  "workflows": [
+    {
+      "id": "vault-garden",
+      "description": "Run a lightweight autonomous garden pass on the Granite vault.",
+      "enabled": true,
+      "triggers": [
+        {
+          "type": "schedule",
+          "cron": "0 */4 * * *"
+        }
+      ],
+      "steps": [
+        {
+          "type": "codex.exec",
+          "cwd": "{{env.HOME}}/Vibe",
+          "prompt": "Run /vibe_vault-garden focus=all against the Granite vault at {{config.vaultPath}}. Make only high-confidence changes and report what changed."
+        }
+      ]
+    },
+    {
+      "id": "scan-mail-followups",
+      "description": "Scan important mail threads and decide whether a human follow-up is needed.",
+      "enabled": true,
+      "triggers": [
+        {
+          "type": "schedule",
+          "cron": "0 * * * *"
+        }
+      ],
+      "steps": [
+        {
+          "type": "codex.exec",
+          "cwd": "{{env.HOME}}/Vibe",
+          "prompt": "Use /vibe_gog-mail. Review relevant client threads and decide whether a reply, review, or note update is needed. If human action is required, create Garden attention items through MCP or the Garden CLI."
+        }
+      ]
+    },
+    {
+      "id": "ingest-transcript",
+      "description": "Ingest a completed transcript into Granite using the meeting digest skill.",
+      "enabled": true,
+      "triggers": [
+        {
+          "type": "webhook",
+          "event": "transcript.completed"
+        }
+      ],
+      "steps": [
+        {
+          "type": "codex.exec",
+          "cwd": "{{env.HOME}}/Vibe",
+          "prompt": "Use /vibe_meeting-digest. A transcript is ready for ingestion.\n\nPayload:\n{{json payload}}"
+        },
+        {
+          "type": "attention.create",
+          "attention": {
+            "type": "review_needed",
+            "title": "Review transcript ingest for {{payload.title}}",
+            "body": "Workflow ingest-transcript finished. Check the generated Granite note, follow-up email, or extracted learnings.",
+            "priority": "medium",
+            "dedupeKey": "transcript-review:{{payload.id}}",
+            "source": "workflow:ingest-transcript"
+          },
+          "notify": true
+        }
+      ]
+    }
+  ]
+}

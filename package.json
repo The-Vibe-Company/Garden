@@ -1,0 +1,25 @@
+{
+  "name": "garden-os",
+  "version": "0.1.0",
+  "description": "A deterministic local runtime for attention queues, schedules, webhooks, and Codex-powered workflows around Granite.",
+  "type": "module",
+  "bin": {
+    "garden": "./src/cli.js"
+  },
+  "scripts": {
+    "test": "NODE_NO_WARNINGS=1 node --test",
+    "start": "./src/cli.js help"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "keywords": [
+    "garden",
+    "granite",
+    "codex",
+    "mcp",
+    "automation",
+    "macos"
+  ],
+  "license": "MIT"
+}
