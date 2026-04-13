@@ -7,6 +7,8 @@ import { spawn } from "node:child_process";
 import { DEFAULT_CONFIG } from "../src/config.js";
 import { writeJsonFile } from "../src/env.js";
 
+const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+
 function encodeMessage(message: unknown): Buffer {
   return Buffer.from(`${JSON.stringify(message)}\n`, "utf8");
 }
@@ -57,7 +59,7 @@ test("Garden MCP exposes tools and serves garden_get_today over stdio", async ()
   writeJsonFile(configPath, DEFAULT_CONFIG);
 
   const child = spawn(process.execPath, ["--import", "tsx", "./src/cli.ts", "mcp", "--config", configPath, "--db", dbPath], {
-    cwd: "/Users/stan/Vibe/plans/garden",
+    cwd: repoRoot,
     stdio: ["pipe", "pipe", "pipe"]
   });
 

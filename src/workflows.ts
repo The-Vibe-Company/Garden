@@ -13,6 +13,48 @@ import { renderTemplate } from "./template.js";
 import { runCodexTask } from "./codex.js";
 import type { AttentionItemInput, CodexExecStep, GardenConfig, NotifyMacosStep, RunWorkflowResult, WorkflowDefinition, WorkflowEvent } from "./types.js";
 
+function parseMinuteCursor(cursor: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(cursor);
+  if (!match) {
+    throw new Error(`Invalid schedule cursor: ${cursor}`);
+  }
+
+  return new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    Number(match[4]),
+    Number(match[5]),
+    0,
+    0
+  );
+}
+
+function addMinutes(date: Date, minutes: number) {
+  return new Date(date.getTime() + minutes * 60_000);
+}
+
+function scheduledCursorRange(lastCursor: string | null, currentCursor: string) {
+  if (!lastCursor) {
+    return [currentCursor];
+  }
+
+  if (lastCursor >= currentCursor) {
+    return [];
+  }
+
+  const cursors = [];
+  let next = addMinutes(parseMinuteCursor(lastCursor), 1);
+  const end = parseMinuteCursor(currentCursor);
+
+  while (next <= end) {
+    cursors.push(minuteCursorKey(next));
+    next = addMinutes(next, 1);
+  }
+
+  return cursors;
+}
+
 function buildContext({ config, workflow, event, trigger, run }) {
   return {
     config,
@@ -218,31 +260,36 @@ export async function tickScheduledWorkflows({ db, config, now = new Date() }) {
     }
 
     const scheduleTriggers = (workflow.triggers ?? []).filter((trigger) => trigger.type === "schedule");
-    for (const trigger of scheduleTriggers) {
-      if (!matchesCron(now, trigger.cron)) {
+    const dueCursors = scheduledCursorRange(getScheduleCursor(db, workflow.id), cursor);
+
+    for (const dueCursor of dueCursors) {
+      const dueDate = parseMinuteCursor(dueCursor);
+      const matchedTrigger = scheduleTriggers.find((trigger) => matchesCron(dueDate, trigger.cron));
+      if (!matchedTrigger) {
         continue;
       }
-      const lastCursor = getScheduleCursor(db, workflow.id);
-      if (lastCursor === cursor) {
-        continue;
-      }
-      setScheduleCursor(db, workflow.id, cursor);
-      runs.push(
-        await runWorkflow({
-          db,
-          config,
-          workflow,
-          triggerType: "schedule",
-          triggerValue: trigger.cron,
-          event: {
-            type: "schedule.tick",
-            payload: {
-              cron: trigger.cron,
-              cursor
-            }
+
+      const result = await runWorkflow({
+        db,
+        config,
+        workflow,
+        triggerType: "schedule",
+        triggerValue: matchedTrigger.cron,
+        event: {
+          type: "schedule.tick",
+          payload: {
+            cron: matchedTrigger.cron,
+            cursor: dueCursor
           }
-        })
-      );
+        }
+      });
+
+      if (result.skipped) {
+        break;
+      }
+
+      setScheduleCursor(db, workflow.id, dueCursor);
+      runs.push(result);
     }
   }
 
