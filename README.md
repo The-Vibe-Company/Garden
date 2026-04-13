@@ -50,25 +50,44 @@ cd Garden
 
 Node 22+ is required because V0 uses the built-in `node:sqlite` module.
 
+Install dependencies:
+
+```bash
+npm install
+```
+
 Build the local CLI:
 
 ```bash
 npm run build
 ```
 
-Link the `garden` command globally on your machine:
+Install the `garden` command globally on your machine:
 
 ```bash
-npm link
+npm run install:local
+garden help
+```
+
+If you already ran `npm install` and just want to refresh the global link after changes:
+
+```bash
+npm run link
 garden help
 ```
 
 ## Quick Start
 
+Before linking globally, you can run the CLI directly from source during development:
+
+```bash
+npm start -- help
+```
+
 Initialize your local config:
 
 ```bash
-node ./dist/src/cli.js init
+garden init
 ```
 
 This writes `~/.garden/config.json`.
@@ -76,13 +95,13 @@ This writes `~/.garden/config.json`.
 Show the current recap:
 
 ```bash
-node ./dist/src/cli.js today
+garden today
 ```
 
 Create an attention item manually:
 
 ```bash
-node ./dist/src/cli.js attention add \
+garden attention add \
   --type reply_needed \
   --title "Reply to Monka about MVP priorities" \
   --body "Draft is ready in Granite." \
@@ -93,20 +112,20 @@ node ./dist/src/cli.js attention add \
 Run the daemon:
 
 ```bash
-node ./dist/src/cli.js daemon
+garden daemon
 ```
 
 Emit a local event for testing:
 
 ```bash
-node ./dist/src/cli.js webhook emit transcript.completed \
+garden webhook emit transcript.completed \
   --payload-file ./examples/transcript-event.json
 ```
 
 Start the MCP server:
 
 ```bash
-node ./dist/src/cli.js mcp
+garden mcp
 ```
 
 ## Architecture
@@ -262,8 +281,14 @@ Example Codex MCP config:
 
 ```toml
 [mcp.garden]
-command = "/absolute/path/to/node"
-args = ["/absolute/path/to/Garden/dist/src/cli.js", "mcp", "--config", "~/.garden/config.json"]
+command = "/absolute/path/to/garden"
+args = ["mcp", "--config", "~/.garden/config.json"]
+```
+
+You can find the installed command path with:
+
+```bash
+which garden
 ```
 
 ## launchd
@@ -283,7 +308,7 @@ An example launch agent is in [examples/com.stangirard.garden.daemon.plist](./ex
 ## Testing
 
 ```bash
-npm test
+npm run check
 ```
 
 ## Roadmap

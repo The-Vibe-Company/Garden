@@ -8,10 +8,14 @@
   },
   "scripts": {
     "build": "NODE_NO_WARNINGS=1 node ./scripts/build.mjs",
-    "link": "npm link",
+    "check": "npm test && npm run typecheck && npm run build",
+    "dev": "NODE_NO_WARNINGS=1 node --import tsx ./src/cli.ts",
+    "install:local": "npm install && npm link",
+    "link": "npm run build && npm link",
+    "prepare": "npm run build",
     "test": "NODE_NO_WARNINGS=1 node --import tsx --test test/**/*.test.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "start": "NODE_NO_WARNINGS=1 node --import tsx ./src/cli.ts help"
+    "start": "npm run dev --"
   },
   "engines": {
     "node": ">=22.0.0"

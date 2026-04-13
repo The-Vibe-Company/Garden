@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 
 function run(command, args, label) {
@@ -15,8 +16,10 @@ function run(command, args, label) {
   }
 }
 
+const distPath = new URL("../dist", import.meta.url);
+
 console.log("Building Garden v0");
-run("npm", ["test"], "test suite");
-run("npm", ["run", "typecheck"], "typecheck");
+fs.rmSync(distPath, { recursive: true, force: true });
+run("npx", ["tsc", "-p", "tsconfig.build.json"], "compile");
 run("node", ["./dist/src/cli.js", "help"], "CLI smoke test");
 console.log("Garden build complete");
