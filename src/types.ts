@@ -122,6 +122,24 @@ export interface WorkflowDefinition {
   steps?: WorkflowStep[];
 }
 
+export interface WorkflowSummary {
+  id: string;
+  description: string | null;
+  enabled: boolean;
+  canRunManually: boolean;
+  scheduleCrons: string[];
+  webhookEvents: string[];
+}
+
+export interface GardenStatusSummary {
+  appName: string;
+  appVersion: string;
+  cliPath: string;
+  configPath: string;
+  configExists: boolean;
+  dbPath: string;
+}
+
 export interface GardenConfig {
   vaultPath: string;
   tickIntervalSeconds: number;
@@ -157,8 +175,98 @@ export interface CodexTaskResult {
   command: string;
   args: string[];
   exitCode: number;
+  processExitCode: number;
   stdout: string;
   stderr: string;
   finalMessage: string;
   parsedStdout: unknown;
+  ok: boolean;
+  failureMessage: string | null;
 }
+
+export interface WorkflowRunStreamEventBase {
+  type: string;
+  workflowId: string;
+  runId: number;
+  at: string;
+}
+
+export interface WorkflowRunStartedEvent extends WorkflowRunStreamEventBase {
+  type: "run.started";
+  run: WorkflowRun;
+}
+
+export interface WorkflowRunSkippedEvent extends WorkflowRunStreamEventBase {
+  type: "run.skipped";
+  run: WorkflowRun;
+  skipped: true;
+  message: string;
+}
+
+export interface WorkflowStepStartedEvent extends WorkflowRunStreamEventBase {
+  type: "step.started";
+  stepIndex: number;
+  stepType: string;
+}
+
+export interface WorkflowStepCompletedEvent extends WorkflowRunStreamEventBase {
+  type: "step.completed";
+  stepIndex: number;
+  stepType: string;
+  ok: true;
+  result: JsonRecord;
+}
+
+export interface WorkflowStepFailedEvent extends WorkflowRunStreamEventBase {
+  type: "step.failed";
+  stepIndex: number;
+  stepType: string;
+  ok: false;
+  message: string;
+}
+
+export interface WorkflowCodexStartedEvent extends WorkflowRunStreamEventBase {
+  type: "codex.started";
+  stepIndex: number;
+  cwd: string | null;
+  promptPreview: string;
+}
+
+export interface WorkflowCodexOutputEvent extends WorkflowRunStreamEventBase {
+  type: "codex.stdout" | "codex.stderr";
+  stepIndex: number;
+  text: string;
+}
+
+export interface WorkflowCodexFinalMessageEvent extends WorkflowRunStreamEventBase {
+  type: "codex.final_message";
+  stepIndex: number;
+  text: string;
+}
+
+export interface WorkflowCodexCompletedEvent extends WorkflowRunStreamEventBase {
+  type: "codex.completed";
+  stepIndex: number;
+  exitCode: number;
+  ok: boolean;
+}
+
+export interface WorkflowRunCompletedEvent extends WorkflowRunStreamEventBase {
+  type: "run.completed";
+  skipped: false;
+  run: WorkflowRun;
+}
+
+export type WorkflowRunStreamEvent =
+  | WorkflowRunStartedEvent
+  | WorkflowRunSkippedEvent
+  | WorkflowStepStartedEvent
+  | WorkflowStepCompletedEvent
+  | WorkflowStepFailedEvent
+  | WorkflowCodexStartedEvent
+  | WorkflowCodexOutputEvent
+  | WorkflowCodexFinalMessageEvent
+  | WorkflowCodexCompletedEvent
+  | WorkflowRunCompletedEvent;
+
+export type WorkflowRunEventSink = (event: WorkflowRunStreamEvent) => void | Promise<void>;

@@ -17,9 +17,11 @@ function run(command, args, label) {
 }
 
 const distPath = new URL("../dist", import.meta.url);
+const distCliPath = new URL("../dist/src/cli.js", import.meta.url);
 
 console.log("Building Garden v0");
 fs.rmSync(distPath, { recursive: true, force: true });
 run("npx", ["tsc", "-p", "tsconfig.build.json"], "compile");
+fs.chmodSync(distCliPath, 0o755);
 run("node", ["./dist/src/cli.js", "help"], "CLI smoke test");
 console.log("Garden build complete");

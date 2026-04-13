@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { resolveConfigPath, writeJsonFile, readJsonFile, ensureParentDir } from "./env.js";
-import type { GardenConfig, WorkflowDefinition } from "./types.js";
+import type { GardenConfig, WorkflowDefinition, WorkflowSummary } from "./types.js";
 
 export const DEFAULT_CONFIG: GardenConfig = {
   vaultPath: "{{env.HOME}}/.granite",
@@ -131,6 +131,21 @@ export function scheduledWorkflows(config: GardenConfig) {
       Array.isArray(workflow.triggers) &&
       workflow.triggers.some((trigger) => trigger.type === "schedule" && trigger.cron)
   );
+}
+
+export function listWorkflowSummaries(config: GardenConfig): WorkflowSummary[] {
+  return (config.workflows ?? []).map((workflow) => ({
+    id: workflow.id,
+    description: workflow.description ?? null,
+    enabled: workflow.enabled !== false,
+    canRunManually: true,
+    scheduleCrons: (workflow.triggers ?? [])
+      .filter((trigger) => trigger.type === "schedule")
+      .map((trigger) => trigger.cron),
+    webhookEvents: (workflow.triggers ?? [])
+      .filter((trigger) => trigger.type === "webhook")
+      .map((trigger) => trigger.event)
+  }));
 }
 
 export function defaultExampleConfigPath() {

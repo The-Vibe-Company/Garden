@@ -11,9 +11,19 @@ import { minuteCursorKey, nowIso } from "./env.js";
 import { notifyMacos } from "./notifier.js";
 import { renderTemplate } from "./template.js";
 import { runCodexTask } from "./codex.js";
-import type { AttentionItemInput, CodexExecStep, GardenConfig, NotifyMacosStep, RunWorkflowResult, WorkflowDefinition, WorkflowEvent } from "./types.js";
+import type {
+  AttentionItemInput,
+  CodexExecStep,
+  GardenConfig,
+  NotifyMacosStep,
+  RunWorkflowResult,
+  WorkflowDefinition,
+  WorkflowEvent,
+  WorkflowRunEventSink,
+  WorkflowRunStreamEvent
+} from "./types.js";
 
-function buildContext({ config, workflow, event, trigger, run }) {
+function buildContext({ config, workflow, event, trigger, run, onEvent, stepIndex = 0 }) {
   return {
     config,
     workflow,
@@ -21,13 +31,41 @@ function buildContext({ config, workflow, event, trigger, run }) {
     event,
     payload: event?.payload ?? {},
     env: process.env,
-    run
+    run,
+    onEvent,
+    stepIndex
   };
 }
 
 async function executeStep({ db, step, context, codexConfig }) {
-  if (step.type === "codex.exec") {
+  if (!context.run?.id) {
+    throw new Error(`Workflow run context is missing a run id for ${context.workflow.id}`);
+  }
+
+  const baseEvent = {
+    workflowId: context.workflow.id,
+    runId: context.run.id
+  };
+
+  await emitWorkflowEvent(context.onEvent, {
+    type: "step.started",
+    ...baseEvent,
+    at: nowIso(),
+    stepIndex: context.stepIndex,
+    stepType: step.type
+  });
+
+  try {
+    if (step.type === "codex.exec") {
     const rendered = renderTemplate(step, context) as CodexExecStep & { codex?: Record<string, unknown> };
+    await emitWorkflowEvent(context.onEvent, {
+      type: "codex.started",
+      ...baseEvent,
+      at: nowIso(),
+      stepIndex: context.stepIndex,
+      cwd: rendered.cwd ?? null,
+      promptPreview: rendered.prompt.slice(0, 160)
+    });
     const result = await runCodexTask({
       codexConfig: {
         ...codexConfig,
@@ -35,25 +73,82 @@ async function executeStep({ db, step, context, codexConfig }) {
       },
       prompt: rendered.prompt,
       cwd: rendered.cwd,
-      workflowId: context.workflow.id
+      workflowId: context.workflow.id,
+      onStdout: async (text) => {
+        await emitWorkflowEvent(context.onEvent, {
+          type: "codex.stdout",
+          ...baseEvent,
+          at: nowIso(),
+          stepIndex: context.stepIndex,
+          text
+        });
+      },
+      onStderr: async (text) => {
+        await emitWorkflowEvent(context.onEvent, {
+          type: "codex.stderr",
+          ...baseEvent,
+          at: nowIso(),
+          stepIndex: context.stepIndex,
+          text
+        });
+      },
+      onFinalMessage: async (text) => {
+        if (!text) {
+          return;
+        }
+        await emitWorkflowEvent(context.onEvent, {
+          type: "codex.final_message",
+          ...baseEvent,
+          at: nowIso(),
+          stepIndex: context.stepIndex,
+          text
+        });
+      }
     });
 
-    if (result.exitCode !== 0) {
+    await emitWorkflowEvent(context.onEvent, {
+      type: "codex.completed",
+      ...baseEvent,
+      at: nowIso(),
+      stepIndex: context.stepIndex,
+      exitCode: result.exitCode,
+      ok: result.ok
+    });
+
+    if (!result.ok) {
+      const failureDetail =
+        result.failureMessage ??
+        [result.stderr, result.stdout, result.finalMessage]
+          .map((value) => value.trim())
+          .find((value) => value.length > 0) ??
+        `exit ${result.exitCode}`;
       throw new Error(
-        `Codex step failed in workflow ${context.workflow.id}: ${result.stderr.trim() || result.stdout.trim() || `exit ${result.exitCode}`}`
+        `Codex step failed in workflow ${context.workflow.id}: ${failureDetail}`
       );
     }
 
-    return {
+    const eventResult = {
       type: step.type,
       ok: true,
       cwd: rendered.cwd,
       promptPreview: rendered.prompt.slice(0, 160),
       finalMessage: result.finalMessage
     };
-  }
 
-  if (step.type === "attention.create") {
+    await emitWorkflowEvent(context.onEvent, {
+      type: "step.completed",
+      ...baseEvent,
+      at: nowIso(),
+      stepIndex: context.stepIndex,
+      stepType: step.type,
+      ok: true,
+      result: eventResult
+    });
+
+    return eventResult;
+    }
+
+    if (step.type === "attention.create") {
     const rendered = renderTemplate(step.attention ?? {}, context) as AttentionItemInput;
     const item = createAttentionItem(db, rendered);
     if (step.notify) {
@@ -63,30 +158,89 @@ async function executeStep({ db, step, context, codexConfig }) {
         body: item.title
       });
     }
-    return {
+    const eventResult = {
       type: step.type,
       ok: true,
       attentionItemId: item.id
     };
-  }
 
-  if (step.type === "notify.macos") {
+    await emitWorkflowEvent(context.onEvent, {
+      type: "step.completed",
+      ...baseEvent,
+      at: nowIso(),
+      stepIndex: context.stepIndex,
+      stepType: step.type,
+      ok: true,
+      result: eventResult
+    });
+
+    return eventResult;
+    }
+
+    if (step.type === "notify.macos") {
     const rendered = renderTemplate(step, context) as NotifyMacosStep;
     await notifyMacos({
       title: rendered.title ?? "Garden",
       subtitle: rendered.subtitle ?? "",
       body: rendered.body ?? ""
     });
-    return {
+    const eventResult = {
       type: step.type,
       ok: true
     };
-  }
 
-  throw new Error(`Unsupported workflow step type: ${step.type}`);
+    await emitWorkflowEvent(context.onEvent, {
+      type: "step.completed",
+      ...baseEvent,
+      at: nowIso(),
+      stepIndex: context.stepIndex,
+      stepType: step.type,
+      ok: true,
+      result: eventResult
+    });
+
+    return eventResult;
+    }
+
+    throw new Error(`Unsupported workflow step type: ${step.type}`);
+  } catch (error) {
+    await emitWorkflowEvent(context.onEvent, {
+      type: "step.failed",
+      ...baseEvent,
+      at: nowIso(),
+      stepIndex: context.stepIndex,
+      stepType: step.type,
+      ok: false,
+      message: error.message
+    });
+    throw error;
+  }
 }
 
-export async function runWorkflow({ db, config, workflow, triggerType, triggerValue, event }): Promise<RunWorkflowResult> {
+async function emitWorkflowEvent(onEvent: WorkflowRunEventSink | undefined, event: WorkflowRunStreamEvent) {
+  if (!onEvent) {
+    return;
+  }
+  await onEvent(event);
+}
+
+export async function runWorkflow({
+  db,
+  config,
+  workflow,
+  triggerType,
+  triggerValue,
+  event,
+  onEvent
+}: {
+  db: any;
+  config: GardenConfig;
+  workflow: WorkflowDefinition;
+  triggerType: string;
+  triggerValue: string | null;
+  event: WorkflowEvent | undefined;
+  onEvent?: WorkflowRunEventSink;
+}): Promise<RunWorkflowResult> {
   const start = startWorkflowRun(db, {
     workflowId: workflow.id,
     triggerType,
@@ -97,6 +251,15 @@ export async function runWorkflow({ db, config, workflow, triggerType, triggerVa
   });
 
   if (start.skipped) {
+    await emitWorkflowEvent(onEvent, {
+      type: "run.skipped",
+      workflowId: workflow.id,
+      runId: start.run.id,
+      at: nowIso(),
+      run: start.run,
+      skipped: true,
+      message: `Workflow ${workflow.id} is already running.`
+    });
     return {
       skipped: true,
       run: start.run
@@ -111,17 +274,30 @@ export async function runWorkflow({ db, config, workflow, triggerType, triggerVa
       type: triggerType,
       value: triggerValue
     },
-    run: start.run
+    run: start.run,
+    onEvent,
+    stepIndex: 0
   });
 
   const stepResults = [];
 
+  await emitWorkflowEvent(onEvent, {
+    type: "run.started",
+    workflowId: workflow.id,
+    runId: start.run.id,
+    at: nowIso(),
+    run: start.run
+  });
+
   try {
-    for (const step of workflow.steps ?? []) {
+    for (const [stepIndex, step] of (workflow.steps ?? []).entries()) {
       const result = await executeStep({
         db,
         step,
-        context,
+        context: {
+          ...context,
+          stepIndex
+        },
         codexConfig: config.codex ?? {}
       });
       stepResults.push(result);
@@ -135,6 +311,16 @@ export async function runWorkflow({ db, config, workflow, triggerType, triggerVa
         stepResults
       }
     });
+
+    await emitWorkflowEvent(onEvent, {
+      type: "run.completed",
+      workflowId: workflow.id,
+      runId: finished.id,
+      at: nowIso(),
+      skipped: false,
+      run: finished
+    });
+
     return {
       skipped: false,
       run: finished
@@ -161,6 +347,15 @@ export async function runWorkflow({ db, config, workflow, triggerType, triggerVa
         executedAt: nowIso(),
         stepResults
       }
+    });
+
+    await emitWorkflowEvent(onEvent, {
+      type: "run.completed",
+      workflowId: workflow.id,
+      runId: finished.id,
+      at: nowIso(),
+      skipped: false,
+      run: finished
     });
 
     return {
