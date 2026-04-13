@@ -4,8 +4,8 @@ import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
 import { parseArgs } from "node:util";
-import { APP_NAME, APP_VERSION, maybeParseJson, parseIsoDate, readJsonFile } from "./env.js";
-import { initConfig, loadConfig, findWorkflow } from "./config.js";
+import { APP_NAME, APP_VERSION, maybeParseJson, parseIsoDate, readJsonFile, resolveConfigPath, resolveDbPath } from "./env.js";
+import { initConfig, loadConfig, findWorkflow, listWorkflowSummaries } from "./config.js";
 import {
   createAttentionItem,
   listAttentionItems,
@@ -23,6 +23,7 @@ function printHelp() {
 
 Commands:
   init [--config <path>] [--force]
+  status [--json] [--config <path>] [--db <path>]
   today [--json] [--config <path>] [--db <path>]
   tick [--config <path>] [--db <path>]
   daemon [--config <path>] [--db <path>] [--port <n>] [--tick-seconds <n>]
@@ -30,7 +31,8 @@ Commands:
   attention list [--status <status>] [--json]
   attention resolve <id>
   attention snooze <id> --until <iso-date>
-  workflow run <workflow-id> [--payload-file <file>] [--event <event>] [--json]
+  workflow list [--config <path>] [--json]
+  workflow run <workflow-id> [--payload-file <file>] [--event <event>] [--json] [--stream-jsonl]
   webhook emit <event-type> [--payload-file <file>] [--json]
   mcp
   help
@@ -99,6 +101,30 @@ async function handleInit(argv) {
   const parsed = parseRootOptions(argv);
   const configPath = initConfig(parsed.values.config, { force: parsed.values.force === true });
   console.log(`Created config at ${configPath}`);
+}
+
+async function handleStatus(argv) {
+  const parsed = parseRootOptions(argv);
+  const configPath = resolveConfigPath(parsed.values.config);
+  const dbPath = resolveDbPath(parsed.values.db);
+  const summary = {
+    appName: APP_NAME,
+    appVersion: APP_VERSION,
+    cliPath: path.resolve(process.argv[1]),
+    configPath,
+    configExists: fs.existsSync(configPath),
+    dbPath
+  };
+
+  if (parsed.values.json) {
+    console.log(JSON.stringify(summary, null, 2));
+    return;
+  }
+
+  console.log(`${summary.appName} ${summary.appVersion}`);
+  console.log(`CLI: ${summary.cliPath}`);
+  console.log(`Config: ${summary.configPath}${summary.configExists ? "" : " (missing)"}`);
+  console.log(`Database: ${summary.dbPath}`);
 }
 
 async function handleToday(argv) {
@@ -220,7 +246,7 @@ async function handleTick(argv) {
 
 async function handleWorkflow(argv) {
   const [subcommand, ...rest] = argv;
-  if (subcommand !== "run") {
+  if (subcommand !== "list" && subcommand !== "run") {
     throw new Error(`Unknown workflow subcommand: ${subcommand}`);
   }
   const parsed = parseArgs({
@@ -231,11 +257,33 @@ async function handleWorkflow(argv) {
       db: { type: "string" },
       event: { type: "string" },
       "payload-file": { type: "string" },
-      json: { type: "boolean" }
+      json: { type: "boolean" },
+      "stream-jsonl": { type: "boolean" }
     }
   });
+
+  if (subcommand === "list") {
+    const { config } = loadConfig(parsed.values.config);
+    const workflows = listWorkflowSummaries(config);
+    if (parsed.values.json) {
+      console.log(JSON.stringify(workflows, null, 2));
+      return;
+    }
+    for (const workflow of workflows) {
+      console.log(`${workflow.id} (${workflow.enabled ? "enabled" : "disabled"})`);
+      if (workflow.description) {
+        console.log(`  ${workflow.description}`);
+      }
+    }
+    return;
+  }
+
   const workflowId = parsed.positionals[0];
   const payload = readPayloadFile(parsed.values["payload-file"]);
+  const streamJsonl = parsed.values["stream-jsonl"] === true;
+  if (streamJsonl && parsed.values.json) {
+    throw new Error(`Use either --json or --stream-jsonl, not both.`);
+  }
   const { config } = loadConfig(parsed.values.config);
   const workflow = findWorkflow(config, workflowId);
   const { db } = await openGardenDb(parsed.values.db);
@@ -249,12 +297,19 @@ async function handleWorkflow(argv) {
       event: {
         type: parsed.values.event ?? "manual.run",
         payload
-      }
+      },
+      onEvent: streamJsonl
+        ? (event) => {
+            process.stdout.write(`${JSON.stringify(event)}\n`);
+          }
+        : undefined
     });
-    if (parsed.values.json) {
-      console.log(JSON.stringify(result, null, 2));
-    } else {
-      console.log(`Workflow ${workflowId}: ${result.run.status}`);
+    if (!streamJsonl) {
+      if (parsed.values.json) {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        console.log(`Workflow ${workflowId}: ${result.run.status}`);
+      }
     }
     if (result.run.status === "failed") {
       process.exitCode = 1;
@@ -396,6 +451,10 @@ async function main() {
 
   if (command === "init") {
     await handleInit(argv);
+    return;
+  }
+  if (command === "status") {
+    await handleStatus(argv);
     return;
   }
   if (command === "today") {
