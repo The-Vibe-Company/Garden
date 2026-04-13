@@ -103,9 +103,10 @@ export function createAttentionItem(db, input) {
   if (dedupeMatch) {
     db.prepare(
       `UPDATE attention_items
-       SET title = ?, body = ?, priority = ?, due_at = ?, snoozed_until = NULL, updated_at = ?, source = ?, metadata_json = ?, links_json = ?, status = 'open'
+       SET type = ?, title = ?, body = ?, priority = ?, due_at = ?, snoozed_until = NULL, updated_at = ?, source = ?, metadata_json = ?, links_json = ?, status = 'open'
        WHERE id = ?`
     ).run(
+      input.type,
       input.title,
       input.body ?? null,
       input.priority ?? "medium",
