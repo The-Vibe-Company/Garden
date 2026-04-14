@@ -1,5 +1,7 @@
 node_modules/
 dist/
+!macos/GardenApp/dist/
+!macos/GardenApp/dist/**
 .DS_Store
 .garden/
 *.log

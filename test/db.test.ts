@@ -48,3 +48,28 @@ test("attention items dedupe and today summary stays coherent", async () => {
   assert.equal(summary.actionable.length, 0);
   assert.equal(summary.info.length, 1);
 });
+
+test("dedupe refresh updates the attention type and recap bucket", async () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "garden-db-dedupe-type-test-"));
+  const dbPath = path.join(tempDir, "garden.db");
+  const { db } = await openGardenDb(dbPath);
+
+  createAttentionItem(db, {
+    type: "info",
+    title: "Transcript ingested",
+    dedupeKey: "transcript:123"
+  });
+
+  const refreshed = createAttentionItem(db, {
+    type: "review_needed",
+    title: "Review transcript ingest",
+    dedupeKey: "transcript:123"
+  });
+
+  assert.equal(refreshed.type, "review_needed");
+
+  const summary = summarizeToday(db);
+  assert.equal(summary.info.length, 0);
+  assert.equal(summary.actionable.length, 1);
+  assert.equal(summary.actionable[0]?.type, "review_needed");
+});

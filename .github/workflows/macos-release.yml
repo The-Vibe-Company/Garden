@@ -1,0 +1,123 @@
+name: Release macOS App
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without v prefix. Defaults to package.json or the pushed tag."
+        required: false
+        type: string
+      tag:
+        description: "Release tag. Defaults to v<version>."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release-macos:
+    name: Build signed macOS release
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          TAG="${{ inputs.tag }}"
+          VERSION="${{ inputs.version }}"
+
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          fi
+
+          if [ -z "$VERSION" ] && [ -n "$TAG" ]; then
+            VERSION="${TAG#v}"
+          fi
+
+          if [ -z "$VERSION" ]; then
+            VERSION="$(node -p "require('./package.json').version")"
+          fi
+
+          if [ -z "$TAG" ]; then
+            TAG="v$VERSION"
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Validate signing secrets
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          [ -n "$MACOS_CERTIFICATE" ] || { echo "Missing MACOS_CERTIFICATE"; exit 1; }
+          [ -n "$MACOS_CERTIFICATE_PWD" ] || { echo "Missing MACOS_CERTIFICATE_PWD"; exit 1; }
+          [ -n "$KEYCHAIN_PASSWORD" ] || { echo "Missing KEYCHAIN_PASSWORD"; exit 1; }
+          [ -n "$APPLE_ID" ] || { echo "Missing APPLE_ID"; exit 1; }
+          [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] || { echo "Missing APPLE_APP_SPECIFIC_PASSWORD"; exit 1; }
+          [ -n "$APPLE_TEAM_ID" ] || { echo "Missing APPLE_TEAM_ID"; exit 1; }
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Import code signing identities
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" \
+            -P "$MACOS_CERTIFICATE_PWD" \
+            -A -t cert -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign:,productsign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+      - name: Build signed and notarized artifacts
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          ./scripts/macos-release-build.sh \
+            --version "${{ steps.meta.outputs.version }}" \
+            --sign \
+            --notarize
+
+      - name: Publish GitHub release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
+          files: |
+            macos/GardenApp/.release/GardenApp-v${{ steps.meta.outputs.version }}.pkg
+            macos/GardenApp/.release/GardenApp-v${{ steps.meta.outputs.version }}.dmg
+
+      - name: Cleanup keychain
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" 2>/dev/null || true
