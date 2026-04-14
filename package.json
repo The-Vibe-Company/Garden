@@ -7,12 +7,16 @@
     "garden": "./dist/src/cli.js"
   },
   "scripts": {
+    "build:standalone-cli": "node ./scripts/build-standalone-cli.mjs",
     "build": "NODE_NO_WARNINGS=1 node ./scripts/build.mjs",
     "check": "npm test && npm run typecheck && npm run build",
     "dev": "NODE_NO_WARNINGS=1 node --import tsx ./src/cli.ts",
     "install:local": "npm install && npm link",
     "link": "npm run build && npm link",
     "prepare": "npm run build",
+    "release:macos": "bash ./scripts/macos-release-build.sh",
+    "release:macos:notarize": "bash ./scripts/macos-release-build.sh --sign --notarize",
+    "release:macos:sign": "bash ./scripts/macos-release-build.sh --sign",
     "test": "NODE_NO_WARNINGS=1 node --import tsx --test test/**/*.test.ts",
     "typecheck": "tsc -p tsconfig.json",
     "start": "npm run dev --"
@@ -26,6 +30,8 @@
   },
   "devDependencies": {
     "@types/node": "^24.6.1",
+    "esbuild": "^0.28.0",
+    "postject": "^1.0.0-alpha.6",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   },

@@ -76,6 +76,55 @@ npm run link
 garden help
 ```
 
+## Local macOS Packaging
+
+If you have a local app bundle at `macos/GardenApp/dist/GardenApp.app`, you can package it together with a standalone `garden` CLI into installable artifacts:
+
+```bash
+npm run release:macos
+```
+
+This creates:
+
+- a `.pkg` installer that installs the app into `/Applications` and the standalone `garden` binary into `/usr/local/bin/garden`
+- a `.dmg` that wraps that installer for distribution
+
+To sign the artifacts with your `Developer ID` certificates:
+
+```bash
+npm run release:macos:sign
+```
+
+To notarize as well, set `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`, then run:
+
+```bash
+npm run release:macos:notarize
+```
+
+The release script also supports `--gh-release <tag>` if you want to upload the generated `.pkg` and `.dmg` to an existing GitHub release.
+
+The prebuilt macOS app bundle is versioned in `macos/GardenApp/dist/GardenApp.app`. Build caches and generated release artifacts stay local under `.build/` and `.release/`.
+
+## GitHub macOS Releases
+
+The repo now includes `.github/workflows/macos-release.yml`.
+
+It builds a signed and notarized macOS release from the versioned app bundle on:
+
+- `git push` of a tag matching `v*`
+- manual `workflow_dispatch`
+
+Required GitHub Actions secrets:
+
+- `MACOS_CERTIFICATE`
+- `MACOS_CERTIFICATE_PWD`
+- `KEYCHAIN_PASSWORD`
+- `APPLE_ID`
+- `APPLE_APP_SPECIFIC_PASSWORD`
+- `APPLE_TEAM_ID`
+
+`MACOS_CERTIFICATE` should be a base64-encoded `.p12` that contains the `Developer ID Application` and `Developer ID Installer` identities used to sign the app bundle and installer package.
+
 ## Quick Start
 
 Before linking globally, you can run the CLI directly from source during development:
